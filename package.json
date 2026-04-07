@@ -1,0 +1,18 @@
+{
+  "name": "typewar-bot",
+  "version": "1.0.0",
+  "description": "TYPEWAR - WPM counter for Telegram groups",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.64.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "express": "^4.18.2",
+    "node-cron": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
