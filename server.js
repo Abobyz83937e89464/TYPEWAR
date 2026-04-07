@@ -13,7 +13,7 @@ const os = require('os');
 // =============================================
 // КОНФИГ
 // =============================================
-const BOT_TOKEN = process.env.BOT_TOKEN || '8628280796:AAG1ZgiThsj-f_XM7pCz5ZJqKCVDH5FPfdA';
+const BOT_TOKEN = process.env.BOT_TOKEN || '8628280796:AAHKletwkLRjgIW9J0IIJp4IEF6xLSBgCew';
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://mhblbxqwrjfxgnxnlmyk.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_yjHQeH6OCcPRAuwz_2wywQ_exPxYzmv';
 const PORT = process.env.PORT || 3000;
