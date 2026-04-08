@@ -481,7 +481,15 @@ bot.on('new_chat_members', async (msg) => {
   const me = await bot.getMe();
   if (!msg.new_chat_members.some(m => m.id === me.id)) return;
   await getChatSettings(msg.chat.id);
-  bot.sendMessage(msg.chat.id, `💀 <b>TYPEWAR</b> активирован\n\nсчитаю WPM, провожу дуэли на скорость.`, { parse_mode: 'HTML' });
+  bot.sendMessage(msg.chat.id, `💀 <b>TYPEWAR</b> активирован
+
+я считаю вашу скорость печати
+⌨️ WPM • ⚔️ дуэли • 🏆 рейтинг
+
+для лучшей работы дайте админку (префикс TYPEWAR)
+не обязательно — просто чтобы отличать от фейков
+
+напиши что-нибудь — я уже считаю`, { parse_mode: 'HTML' });
 });
 
 bot.onText(/\/wpm/, async (msg) => {
