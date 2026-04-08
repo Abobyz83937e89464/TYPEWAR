@@ -13,11 +13,13 @@ const os = require('os');
 // =============================================
 // КОНФИГ
 // =============================================
-// Токен обновлен
 const BOT_TOKEN = process.env.BOT_TOKEN || '8628280796:AAH3aZ0w7uQKvrx93y-AQGQAWrH80kKXHls';
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://mhblbxqwrjfxgnxnlmyk.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_yjHQeH6OCcPRAuwz_2wywQ_exPxYzmv';
 const PORT = process.env.PORT || 3000;
+
+// 👑 OWNER ID — только этот юзер может /null_rating
+const OWNER_ID = 8503291981;
 
 // =============================================
 // АВТО-ОПРЕДЕЛЕНИЕ RENDER URL
@@ -264,6 +266,7 @@ function defaultSettings() {
   return {
     trolling_enabled: true,
     duels_enabled: true,
+    autowpm_enabled: true,
     min_chars: 15,
     cooldown_seconds: 3,
     max_wpm_limit: 300,
@@ -273,12 +276,9 @@ function defaultSettings() {
 
 // 🛑 АНТИ-ЧИТ СИСТЕМА
 function isGibberish(text) {
-  // Исключаем 4+ одинаковых буквы подряд (аааа, ьььь)
   if (/(.)\1{3,}/.test(text)) return true;
-  // Исключаем слова длиннее 20 символов без пробелов (явный спам по клаве)
   const words = text.trim().split(/\s+/);
   if (words.some(w => w.length > 20)) return true;
-  // Исключаем 6 согласных подряд
   if (/[бвгджзйклмнпрстфхцчшщbcdfghjklmnpqrstvwxyz]{6,}/i.test(text)) return true;
   return false;
 }
@@ -357,6 +357,8 @@ async function getChatSettings(chatId) {
         .upsert({ chat_id: chatId }, { onConflict: 'chat_id' }).select().single();
       return d || defaultSettings();
     }
+    // Добавляем дефолт для autowpm_enabled если его нет в базе
+    if (data && data.autowpm_enabled === undefined) data.autowpm_enabled = true;
     return data || defaultSettings();
   } catch (e) { return defaultSettings(); }
 }
@@ -366,6 +368,34 @@ async function setChatSetting(chatId, key, value) {
     const u = { chat_id: chatId }; u[key] = value;
     await supabase.from('chat_settings').upsert(u, { onConflict: 'chat_id' });
   } catch (e) { }
+}
+
+// =============================================
+// 👑 OWNER: ОБНУЛЕНИЕ РЕЙТИНГА
+// =============================================
+async function nullRating(chatId, targetUserId, newValue) {
+  try {
+    // Обновляем chat_stats во ВСЕХ чатах для этого юзера
+    const updateData = {
+      best_wpm: newValue,
+      avg_wpm: newValue,
+      last_wpm: newValue
+    };
+    if (newValue === 0) {
+      updateData.messages_count = 0;
+    }
+    const { error } = await supabase.from('chat_stats')
+      .update(updateData)
+      .eq('user_id', targetUserId);
+    if (error) {
+      console.error('[DB] nullRating:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('[DB] nullRating:', e.message);
+    return false;
+  }
 }
 
 // =============================================
@@ -390,7 +420,6 @@ async function acceptDuel(duelId, user2Id) {
   } catch (e) { return null; }
 }
 
-// Храним активные сессии дуэлей (подсчет сообщений) в памяти
 const activeSpamDuels = {};
 
 async function finishSpamDuel(chatId, duelId) {
@@ -407,7 +436,7 @@ async function finishSpamDuel(chatId, duelId) {
   try {
     await supabase.from('duels').update({
       status: 'finished',
-      user1_wpm: user1Score, 
+      user1_wpm: user1Score,
       user2_wpm: user2Score,
       winner_id: winnerId
     }).eq('id', duelId);
@@ -505,12 +534,67 @@ bot.onText(/\/top/, async (msg) => {
 });
 
 // =============================================
+// 👑 /null_rating — ОБНУЛЕНИЕ РЕЙТИНГА (OWNER ONLY)
+// =============================================
+bot.onText(/\/null_rating\s+@(\S+)\s+(\d+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  // Проверяем что это owner
+  if (userId !== OWNER_ID) {
+    bot.sendMessage(chatId, '🚫 У тебя нет прав на эту команду.', { reply_to_message_id: msg.message_id });
+    return;
+  }
+
+  const targetUsername = match[1]; // без @
+  const newValue = parseInt(match[2]);
+
+  // Ищем юзера в базе по username
+  try {
+    const { data: targetUser, error } = await supabase.from('users').select('*')
+      .eq('username', targetUsername).single();
+
+    if (error || !targetUser) {
+      bot.sendMessage(chatId, `❌ Юзер <b>@${esc(targetUsername)}</b> не найден в базе.`, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+      return;
+    }
+
+    const success = await nullRating(chatId, targetUser.user_id, newValue);
+
+    if (success) {
+      bot.sendMessage(chatId, `
+🔧 <b>РЕЙТИНГ ОБНУЛЁН</b>
+━━━━━━━━━━━━━━━
+👤 Юзер: <b>@${esc(targetUsername)}</b>
+📊 Новое значение WPM: <b>${newValue}</b>
+${newValue === 0 ? '💀 Всё обнулено. Начинает заново.' : `⚡ Установлен WPM: ${newValue}`}
+      `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+    } else {
+      bot.sendMessage(chatId, `❌ Ошибка при обнулении рейтинга.`, { reply_to_message_id: msg.message_id });
+    }
+  } catch (e) {
+    console.error('[CMD] null_rating error:', e.message);
+    bot.sendMessage(chatId, `❌ Ошибка: ${e.message}`, { reply_to_message_id: msg.message_id });
+  }
+});
+
+// Обработка /null_rating без параметров или с неправильным форматом
+bot.onText(/^\/null_rating$/, async (msg) => {
+  if (msg.from.id !== OWNER_ID) return;
+  bot.sendMessage(msg.chat.id, `
+🔧 <b>Использование:</b>
+<code>/null_rating @username 0</code> — обнулить всё
+<code>/null_rating @username 50</code> — установить WPM 50
+  `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+});
+
+// =============================================
 // НОВАЯ СИСТЕМА ДУЭЛЕЙ
 // =============================================
 bot.onText(/\/duel/, async (msg) => {
   const chatId = msg.chat.id; const userId = msg.from.id;
   if (msg.chat.type === 'private') { bot.sendMessage(chatId, '⚔️ Дуэли только в чатах'); return; }
-  
+
   const settings = await getChatSettings(chatId);
   if (!settings.duels_enabled) { bot.sendMessage(chatId, '⚔️ Дуэли отключены'); return; }
   await ensureUser(msg.from);
@@ -552,7 +636,6 @@ ${esc(getNameFromInfo(u1))} ⚡ VS ⚡ ${esc(getName(msg))}
     return;
   }
 
-  // Создание дуэли - выбор количества слов
   bot.sendMessage(chatId, `⚔️ <b>Выбери минимальное количество слов в сообщении:</b>`, {
     parse_mode: 'HTML',
     reply_markup: {
@@ -619,7 +702,6 @@ bot.onText(/\/test/, async (msg) => {
     last_message_text: '__TEST__:' + testText
   }, { onConflict: 'user_id,chat_id' });
 
-  // Убрал <code>, чтобы нельзя было скопировать одним кликом
   bot.sendMessage(chatId, `
 ⌨️ <b>ТЕСТ СКОРОСТИ</b>
 ━━━━━━━━━━━━━━━
@@ -643,11 +725,13 @@ bot.onText(/\/settings/, async (msg) => {
     if (!['creator', 'administrator'].includes(m.status)) { bot.sendMessage(chatId, '⚙️ Только для админов', { reply_to_message_id: msg.message_id }); return; }
   } catch (e) { }
   const s = await getChatSettings(chatId);
+  const autowpm = s.autowpm_enabled !== undefined ? s.autowpm_enabled : true;
   bot.sendMessage(chatId, `
 ⚙️ <b>TYPEWAR — Настройки</b>
 ━━━━━━━━━━━━━━━
 😈 Троллинг: <b>${s.trolling_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>
 ⚔️ Дуэли: <b>${s.duels_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>
+📊 Авто-WPM: <b>${autowpm ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>
 📏 Мин. символов: <b>${s.min_chars}</b>
 ⏱ Кулдаун: <b>${s.cooldown_seconds}с</b>
 🚫 Макс WPM: <b>${s.max_wpm_limit}</b>
@@ -655,10 +739,12 @@ bot.onText(/\/settings/, async (msg) => {
 ━━━━━━━━━━━━━━━
 /set_trolling on/off
 /set_duels on/off
+/set_autowpm on/off
   `, { parse_mode: 'HTML' });
 });
 
 const boolVal = (v) => ['on', '1', 'true', 'да', 'вкл'].includes(v.toLowerCase());
+
 bot.onText(/\/set_trolling (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
   try { const m = await bot.getChatMember(chatId, msg.from.id); if (!['creator', 'administrator'].includes(m.status)) return; } catch (e) { }
@@ -671,6 +757,13 @@ bot.onText(/\/set_duels (.+)/, async (msg, match) => {
   try { const m = await bot.getChatMember(chatId, msg.from.id); if (!['creator', 'administrator'].includes(m.status)) return; } catch (e) { }
   const on = boolVal(match[1]); await setChatSetting(chatId, 'duels_enabled', on);
   bot.sendMessage(chatId, `⚔️ Дуэли: <b>${on ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>`, { parse_mode: 'HTML' });
+});
+
+bot.onText(/\/set_autowpm (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  try { const m = await bot.getChatMember(chatId, msg.from.id); if (!['creator', 'administrator'].includes(m.status)) return; } catch (e) { }
+  const on = boolVal(match[1]); await setChatSetting(chatId, 'autowpm_enabled', on);
+  bot.sendMessage(chatId, `📊 Авто-WPM сообщения: <b>${on ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>`, { parse_mode: 'HTML' });
 });
 
 bot.onText(/\/help/, async (msg) => {
@@ -690,53 +783,6 @@ bot.onText(/\/help/, async (msg) => {
 });
 
 // =============================================
-// СЕКРЕТНАЯ КОМАНДА СОЗДАТЕЛЯ (Morpheusov)
-// =============================================
-const CREATOR_ID = 8503291981; 
-
-bot.onText(/\/null_rating\s+@?([\w]+)(?:\s+(\d+))?/, async (msg, match) => {
-  if (msg.from.id !== CREATOR_ID) return;
-  const chatId = msg.chat.id;
-  const target = match[1];
-  const val = match[2] ? parseInt(match[2]) : 0;
-
-  let targetUserId;
-  
-  if (/^\d+$/.test(target)) {
-    targetUserId = parseInt(target);
-  } else {
-    try {
-      const { data, error } = await supabase.from('users').select('user_id').ilike('username', target).limit(1).single();
-      if (data) {
-        targetUserId = data.user_id;
-      }
-    } catch (e) {
-      bot.sendMessage(chatId, `❌ Пользователь @${target} не найден в БД.`, { reply_to_message_id: msg.message_id });
-      return;
-    }
-  }
-
-  if (!targetUserId) {
-    bot.sendMessage(chatId, `❌ Не удалось определить ID пользователя @${target}.`, { reply_to_message_id: msg.message_id });
-    return;
-  }
-
-  try {
-    // Обнуляем или устанавливаем значение во всех чатах для этого юзера
-    await supabase.from('chat_stats').update({
-      best_wpm: val,
-      avg_wpm: val,
-      last_wpm: val,
-      messages_count: val === 0 ? 0 : 1
-    }).eq('user_id', targetUserId);
-
-    bot.sendMessage(chatId, `✅ Рейтинг пользователя ${target} изменён на <b>${val} WPM</b> (глобально во всех чатах).`, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
-  } catch (e) {
-    bot.sendMessage(chatId, `❌ Ошибка при обновлении: ${e.message}`, { reply_to_message_id: msg.message_id });
-  }
-});
-
-// =============================================
 // 💀 ГЛАВНЫЙ ОБРАБОТЧИК СООБЩЕНИЙ
 // =============================================
 bot.on('message', async (msg) => {
@@ -753,6 +799,9 @@ bot.on('message', async (msg) => {
   const settings = await getChatSettings(chatId);
   const state = await getUserState(userId, chatId);
 
+  // Определяем включен ли autowpm
+  const autowpmEnabled = settings.autowpm_enabled !== undefined ? settings.autowpm_enabled : true;
+
   // =============================================
   // ДУЭЛЬ - Подсчет сообщений
   // =============================================
@@ -768,8 +817,7 @@ bot.on('message', async (msg) => {
         }
       }
     }
-    // В дуэли на спам мы не считаем WPM для базы, чтобы не портить стату рандомными обрывками
-    return; 
+    return;
   }
 
   // =============================================
@@ -809,12 +857,12 @@ ${getProgressBar(wpm)}${rec}
   // =============================================
   // АВТО WPM
   // =============================================
-  
+
   if (text.length < settings.min_chars) {
     await updateUserState(userId, chatId, text, settings.cooldown_seconds);
     return;
   }
-  
+
   // АНТИ-ЧИТ: Фильтруем спам, повторения и одинаковые буквы
   if (isGibberish(text)) {
     await updateUserState(userId, chatId, text, settings.cooldown_seconds);
@@ -840,23 +888,27 @@ ${getProgressBar(wpm)}${rec}
 
         await updateChatStats(chatId, userId, wpm);
 
-        if (wpm > oldBest && oldBest > 0) {
-          const diff = wpm - oldBest;
-          bot.sendMessage(chatId, `
+        // Авто-WPM сообщения отправляются только если autowpm включён
+        if (autowpmEnabled) {
+          if (wpm > oldBest && oldBest > 0) {
+            const diff = wpm - oldBest;
+            bot.sendMessage(chatId, `
 📈 <b>${esc(getName(msg))}</b>
 ${getWpmEmoji(wpm)} WPM поднялся до <b>${wpm}</b>! (+${diff})
 было: ${oldBest} → стало: <b>${wpm}</b>
 ${rand(WPM_UP_MESSAGES)}
-          `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
-        }
-        else if (oldBest === 0 && (!oldStats || oldStats.messages_count === 0)) {
-          bot.sendMessage(chatId, `
+            `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+          }
+          else if (oldBest === 0 && (!oldStats || oldStats.messages_count === 0)) {
+            bot.sendMessage(chatId, `
 ⚡ <b>${esc(getName(msg))}</b> — первый замер!
 ${getWpmEmoji(wpm)} <b>${wpm} WPM</b> • ${getRank(wpm)}
-          `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+            `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+          }
         }
 
-        if (settings.trolling_enabled && Math.random() < settings.troll_chance) {
+        // Троллинг тоже зависит от autowpm
+        if (autowpmEnabled && settings.trolling_enabled && Math.random() < settings.troll_chance) {
           if (wpm <= oldBest || oldBest === 0) {
             bot.sendMessage(chatId, rand(TROLL_MESSAGES[getTrollCategory(wpm)]), { reply_to_message_id: msg.message_id });
           }
