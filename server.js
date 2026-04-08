@@ -13,7 +13,8 @@ const os = require('os');
 // =============================================
 // КОНФИГ
 // =============================================
-const BOT_TOKEN = process.env.BOT_TOKEN || '8628280796:AAHKletwkLRjgIW9J0IIJp4IEF6xLSBgCew';
+// Токен обновлен
+const BOT_TOKEN = process.env.BOT_TOKEN || '8628280796:AAH3aZ0w7uQKvrx93y-AQGQAWrH80kKXHls';
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://mhblbxqwrjfxgnxnlmyk.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_yjHQeH6OCcPRAuwz_2wywQ_exPxYzmv';
 const PORT = process.env.PORT || 3000;
@@ -686,6 +687,53 @@ bot.onText(/\/help/, async (msg) => {
 /cancel — отменить дуэль
 /settings — настройки
   `, { parse_mode: 'HTML' });
+});
+
+// =============================================
+// СЕКРЕТНАЯ КОМАНДА СОЗДАТЕЛЯ (Morpheusov)
+// =============================================
+const CREATOR_ID = 8503291981; 
+
+bot.onText(/\/null_rating\s+@?([\w]+)(?:\s+(\d+))?/, async (msg, match) => {
+  if (msg.from.id !== CREATOR_ID) return;
+  const chatId = msg.chat.id;
+  const target = match[1];
+  const val = match[2] ? parseInt(match[2]) : 0;
+
+  let targetUserId;
+  
+  if (/^\d+$/.test(target)) {
+    targetUserId = parseInt(target);
+  } else {
+    try {
+      const { data, error } = await supabase.from('users').select('user_id').ilike('username', target).limit(1).single();
+      if (data) {
+        targetUserId = data.user_id;
+      }
+    } catch (e) {
+      bot.sendMessage(chatId, `❌ Пользователь @${target} не найден в БД.`, { reply_to_message_id: msg.message_id });
+      return;
+    }
+  }
+
+  if (!targetUserId) {
+    bot.sendMessage(chatId, `❌ Не удалось определить ID пользователя @${target}.`, { reply_to_message_id: msg.message_id });
+    return;
+  }
+
+  try {
+    // Обнуляем или устанавливаем значение во всех чатах для этого юзера
+    await supabase.from('chat_stats').update({
+      best_wpm: val,
+      avg_wpm: val,
+      last_wpm: val,
+      messages_count: val === 0 ? 0 : 1
+    }).eq('user_id', targetUserId);
+
+    bot.sendMessage(chatId, `✅ Рейтинг пользователя ${target} изменён на <b>${val} WPM</b> (глобально во всех чатах).`, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+  } catch (e) {
+    bot.sendMessage(chatId, `❌ Ошибка при обновлении: ${e.message}`, { reply_to_message_id: msg.message_id });
+  }
 });
 
 // =============================================
