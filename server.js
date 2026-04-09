@@ -8,15 +8,14 @@ const http = require('http');
 // =============================================
 // КОНФИГ
 // =============================================
-const BOT_TOKEN = process.env.BOT_TOKEN || '8628280796:AAEaBQSyC6WbH2-BzJIhj3IEtlZqvIdahmM';
+const BOT_TOKEN = process.env.BOT_TOKEN || '8628280796:AAGson9xJgPtiIjCMKJsKnPctJA-r0aF68s';
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://mhblbxqwrjfxgnxnlmyk.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_yjHQeH6OCcPRAuwz_2wywQ_exPxYzmv';
 const PORT = process.env.PORT || 3000;
-
 const OWNER_ID = 8503291981;
 
 // =============================================
-// АВТО-ОПРЕДЕЛЕНИЕ RENDER URL
+// RENDER URL
 // =============================================
 function detectRenderURL() {
   if (process.env.RENDER_URL) return process.env.RENDER_URL;
@@ -34,14 +33,8 @@ let SUPABASE_CONNECTED = false;
 // =============================================
 const app = express();
 const bot = new TelegramBot(BOT_TOKEN, {
-  polling: {
-    autoStart: true,
-    params: { timeout: 30 }
-  },
-  request: {
-    agentOptions: { keepAlive: true, keepAliveMsecs: 10000 },
-    timeout: 60000
-  }
+  polling: { autoStart: true, params: { timeout: 30 } },
+  request: { agentOptions: { keepAlive: true, keepAliveMsecs: 10000 }, timeout: 60000 }
 });
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -54,49 +47,44 @@ bot.setMyCommands([
   { command: '/titles', description: 'Твои титулы' },
   { command: '/settings', description: 'Настройки чата (для админов)' },
   { command: '/help', description: 'Справка по боту' }
-]).catch(err => console.error('[BOT] Ошибка установки команд:', err.message));
+]).catch(() => {});
 
 // =============================================
 // СИСТЕМА ТИТУЛОВ
 // =============================================
 const ALL_TITLES = {
-  // ЗА АКТИВНОСТЬ
-  writer: { emoji: '💬', name: 'Писатель', desc: '100 сообщений в чате', category: 'activity' },
-  tryhard: { emoji: '🧩', name: 'Задрот', desc: '500 сообщений в чате', category: 'activity' },
-  lives_in_chat: { emoji: '💀', name: 'Живёт в чате', desc: '2000 сообщений в чате', category: 'activity' },
-
-  // ЗА СКОРОСТЬ
-  snail: { emoji: '🐌', name: 'Улитка', desc: 'WPM ниже 15', category: 'speed' },
-  runner: { emoji: '🏃', name: 'Бегун', desc: 'WPM 60+', category: 'speed' },
-  racer: { emoji: '🚗', name: 'Гонщик', desc: 'WPM 80+', category: 'speed' },
-  rocket: { emoji: '🚀', name: 'Ракета', desc: 'WPM 100+', category: 'speed' },
-  lightning: { emoji: '⚡', name: 'Молния', desc: 'WPM 150+', category: 'speed' },
-  legend: { emoji: '👑', name: 'Легенда', desc: 'WPM 200+', category: 'speed' },
-
-  // РЕДКИЕ
-  glitch: { emoji: '❓', name: 'Глитч', desc: 'Шанс 1% при сообщении', category: 'rare' },
-  observed: { emoji: '👁', name: 'Наблюдаемый', desc: 'Бот случайно даёт', category: 'rare' },
-  system_error: { emoji: '⚠️', name: 'Ошибка системы', desc: 'WPM превысил лимит', category: 'rare' },
-
-  // ДУЭЛИ
-  duelist: { emoji: '⚔️', name: 'Дуэлянт', desc: 'Выиграй 1 дуэль', category: 'duel' },
-  champion: { emoji: '🏆', name: 'Чемпион', desc: 'Выиграй 10 дуэлей', category: 'duel' }
+  writer: { emoji: '💬', name: 'Писатель', desc: '100 сообщений в чате', category: 'activity', check: (s) => s.messages_count >= 100 },
+  tryhard: { emoji: '🧩', name: 'Задрот', desc: '500 сообщений в чате', category: 'activity', check: (s) => s.messages_count >= 500 },
+  lives_in_chat: { emoji: '💀', name: 'Живёт в чате', desc: '2000 сообщений в чате', category: 'activity', check: (s) => s.messages_count >= 2000 },
+  snail: { emoji: '🐌', name: 'Улитка', desc: 'Лучший WPM ниже 15', category: 'speed', check: (s) => s.best_wpm > 0 && s.best_wpm < 15 },
+  runner: { emoji: '🏃', name: 'Бегун', desc: 'WPM 60+', category: 'speed', check: (s) => s.best_wpm >= 60 },
+  racer: { emoji: '🚗', name: 'Гонщик', desc: 'WPM 80+', category: 'speed', check: (s) => s.best_wpm >= 80 },
+  rocket: { emoji: '🚀', name: 'Ракета', desc: 'WPM 100+', category: 'speed', check: (s) => s.best_wpm >= 100 },
+  lightning: { emoji: '⚡', name: 'Молния', desc: 'WPM 150+', category: 'speed', check: (s) => s.best_wpm >= 150 },
+  legend: { emoji: '👑', name: 'Легенда', desc: 'WPM 200+', category: 'speed', check: (s) => s.best_wpm >= 200 },
+  glitch: { emoji: '❓', name: 'Глитч', desc: 'Случайный шанс 0.1% при сообщении', category: 'rare', check: () => false },
+  observed: { emoji: '👁', name: 'Наблюдаемый', desc: 'Бот случайно выбирает (0.05%)', category: 'rare', check: () => false },
+  system_error: { emoji: '⚠️', name: 'Ошибка системы', desc: 'WPM превысил лимит', category: 'rare', check: () => false },
+  duelist: { emoji: '⚔️', name: 'Дуэлянт', desc: 'Выиграй 1 дуэль', category: 'duel', check: () => false },
+  champion: { emoji: '🏆', name: 'Чемпион', desc: 'Выиграй 10 дуэлей', category: 'duel', check: () => false }
 };
 
 // =============================================
-// КУЛДАУНЫ
+// КУЛДАУНЫ И ХРАНИЛИЩА
 // =============================================
 const topCooldowns = {};
+const titlesCooldowns = {};
+const titleNotifications = []; // {chatId, msgId, time}
+const activeSpamDuels = {};
 
 // =============================================
-// ПРОВЕРКА ПОДКЛЮЧЕНИЯ SUPABASE
+// SUPABASE CHECK
 // =============================================
 async function checkSupabase() {
   try {
     const { data, error } = await supabase.from('users').select('id').limit(1);
     if (error) { SUPABASE_CONNECTED = false; return false; }
-    SUPABASE_CONNECTED = true;
-    return true;
+    SUPABASE_CONNECTED = true; return true;
   } catch (e) { SUPABASE_CONNECTED = false; return false; }
 }
 
@@ -118,11 +106,8 @@ function pingServer(url) {
 // CRON
 // =============================================
 cron.schedule('*/4 * * * *', () => {
-  if (RENDER_URL) { pingServer(RENDER_URL); }
-  else {
-    RENDER_URL = detectRenderURL();
-    pingServer(RENDER_URL || `http://localhost:${PORT}`);
-  }
+  if (RENDER_URL) pingServer(RENDER_URL);
+  else { RENDER_URL = detectRenderURL(); pingServer(RENDER_URL || `http://localhost:${PORT}`); }
 });
 
 cron.schedule('* * * * *', async () => {
@@ -130,17 +115,32 @@ cron.schedule('* * * * *', async () => {
 });
 
 cron.schedule('*/10 * * * *', async () => {
-  const was = SUPABASE_CONNECTED;
-  await checkSupabase();
+  const was = SUPABASE_CONNECTED; await checkSupabase();
   if (!was && SUPABASE_CONNECTED) console.log('[SUPABASE] ✅ Переподключение');
   else if (was && !SUPABASE_CONNECTED) console.log('[SUPABASE] ❌ Потеряно');
+});
+
+// Очистка уведомлений о титулах каждую минуту
+cron.schedule('* * * * *', async () => {
+  const now = Date.now();
+  const expired = [];
+  for (let i = titleNotifications.length - 1; i >= 0; i--) {
+    const n = titleNotifications[i];
+    if (now - n.time >= 20 * 60 * 1000) {
+      expired.push(n);
+      titleNotifications.splice(i, 1);
+    }
+  }
+  for (const n of expired) {
+    try { await bot.deleteMessage(n.chatId, n.msgId); } catch (e) { }
+  }
 });
 
 // =============================================
 // EXPRESS
 // =============================================
 app.get('/', (req, res) => {
-  res.json({ bot: 'TYPEWAR', status: 'active', supabase: SUPABASE_CONNECTED, uptime: Math.floor(process.uptime()) + 's' });
+  res.json({ bot: 'TYPEWAR v4', status: 'active', supabase: SUPABASE_CONNECTED, uptime: Math.floor(process.uptime()) + 's' });
 });
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'alive', supabase: SUPABASE_CONNECTED });
@@ -148,15 +148,14 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, async () => {
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('💀  TYPEWAR BOT v3');
+  console.log('💀  TYPEWAR BOT v4');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   const sbOk = await checkSupabase();
   console.log(`[SUPABASE] ${sbOk ? '✅' : '❌'}`);
   RENDER_URL = detectRenderURL();
   if (RENDER_URL) { console.log(`[RENDER]   ✅ ${RENDER_URL}`); setTimeout(() => pingServer(RENDER_URL), 3000); }
   else console.log(`[RENDER]   ⚠️  Не найдена`);
-  console.log(`[SERVER]   🌐 Порт: ${PORT}`);
-  console.log('\n[BOT]      ⚡ Polling started\n');
+  console.log(`[SERVER]   🌐 Порт: ${PORT}\n[BOT]      ⚡ Polling started\n`);
 });
 
 // =============================================
@@ -191,6 +190,7 @@ const TROLL_MESSAGES = {
 };
 
 const WPM_UP_MESSAGES = ['📈 рекорд обновлён!', '🔥 новый личный рекорд!', '⚡ ты стал быстрее!', '💪 прогресс!', '🚀 скорость растёт!'];
+const WPM_DOWN_MESSAGES = ['📉 скорость упала...', '😬 ты замедлился', '🐌 куда делась скорость?', '📉 было лучше...'];
 
 // =============================================
 // УТИЛИТЫ
@@ -247,8 +247,7 @@ function calculateSimilarity(a, b) {
   if (!a.length || !b.length) return 0;
   if (a.length > 500 || b.length > 500) {
     const w1 = a.split(/\s+/), w2 = b.split(/\s+/);
-    let m = 0;
-    for (const w of w1) if (w2.includes(w)) m++;
+    let m = 0; for (const w of w1) if (w2.includes(w)) m++;
     return m / Math.max(w1.length, w2.length);
   }
   const mx = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
@@ -261,91 +260,89 @@ function calculateSimilarity(a, b) {
 }
 
 function defaultSettings() {
-  return {
-    trolling_enabled: true, duels_enabled: true, autowpm_enabled: true,
-    min_chars: 15, cooldown_seconds: 3, max_wpm_limit: 300, troll_chance: 0.15
-  };
+  return { trolling_enabled: true, duels_enabled: true, autowpm_enabled: true, min_chars: 6, cooldown_seconds: 3, max_wpm_limit: 300, troll_chance: 0.15 };
 }
 
 // =============================================
-// 🛑 ЖЁСТКИЙ АНТИ-ЧИТ
+// 🛑 ЖЁСТКИЙ АНТИ-ЧИТ v2
 // =============================================
+function countUniqueChars(text) {
+  const clean = text.replace(/\s+/g, '').toLowerCase();
+  const set = new Set(clean.split(''));
+  return set.size;
+}
+
 function isGibberish(text) {
-  // 4+ одинаковых буквы подряд
   if (/(.)\1{3,}/.test(text)) return true;
-  // слова длиннее 20 символов
   const words = text.trim().split(/\s+/);
   if (words.some(w => w.length > 20)) return true;
-  // 6 согласных подряд
   if (/[бвгджзйклмнпрстфхцчшщbcdfghjklmnpqrstvwxyz]{6,}/i.test(text)) return true;
   return false;
 }
 
-function isLaughSpam(text) {
-  // Проверяем 5+ повторяющихся одинаковых букв разбросанных по короткому тексту (ахахахах, хххх)
+function isLaughOrSpam(text) {
   const clean = text.replace(/\s+/g, '').toLowerCase();
-  if (clean.length < 20) {
-    const freq = {};
-    for (const ch of clean) {
-      if (/[а-яёa-z]/i.test(ch)) {
-        freq[ch] = (freq[ch] || 0) + 1;
-      }
-    }
-    for (const ch in freq) {
-      if (freq[ch] >= 5 && freq[ch] / clean.length > 0.3) return true;
-    }
-  }
+  // Менее 5 уникальных символов — скорее всего спам или смех
+  if (clean.length >= 4 && countUniqueChars(text) < 5) return true;
   // Паттерны смеха
   if (/^[хxаaоoеeиiуu)(\s]{4,}$/i.test(clean)) return true;
   if (/([аaхxоo])\1{2,}/i.test(text)) return true;
   if (/ха{2,}/i.test(text) || /хе{2,}/i.test(text) || /хи{2,}/i.test(text)) return true;
   if (/а{2,}х/i.test(text)) return true;
   if (/ло{2,}л/i.test(text)) return true;
+  // 5 одинаковых букв разбросанных в коротком тексте
+  if (clean.length < 25) {
+    const freq = {};
+    for (const ch of clean) {
+      if (/[а-яёa-z]/i.test(ch)) freq[ch] = (freq[ch] || 0) + 1;
+    }
+    for (const ch in freq) {
+      if (freq[ch] >= 5 && freq[ch] / clean.length > 0.25) return true;
+    }
+  }
   return false;
 }
 
-function isOnlyNumbersOrLetters(text) {
-  // Только отдельные буквы/цифры через пробел: "а б в г" или "1 2 3 4"
+function isOnlyNumbersOrSingleChars(text) {
   const words = text.trim().split(/\s+/);
-  if (words.length >= 3 && words.every(w => w.length <= 2)) return true;
-  // Только цифры
+  if (words.length >= 3 && words.every(w => w.length <= 1)) return true;
   if (/^\d[\d\s]*$/.test(text.trim())) return true;
   return false;
 }
 
 function shouldCountWPM(text, timeDiff, prevText) {
+  const clean = text.replace(/\s+/g, '');
+  // Минимум 6 символов
+  if (clean.length < 6) return false;
+  // Минимум 5 уникальных символов
+  if (countUniqueChars(text) < 5) return false;
   if (isGibberish(text)) return false;
-  if (isLaughSpam(text)) return false;
-  if (isOnlyNumbersOrLetters(text)) return false;
-
+  if (isLaughOrSpam(text)) return false;
+  if (isOnlyNumbersOrSingleChars(text)) return false;
   const words = text.trim().split(/\s+/).filter(w => w.length > 0);
-
-  // Если 1-2 слова и время < 4 секунд — не считаем
+  // 1-2 слова за менее 4 секунд — не считаем
   if (words.length <= 2 && timeDiff < 4) return false;
-
-  // Если сообщение слишком похоже на предыдущее
+  // Похоже на прошлое сообщение
   if (prevText && calculateSimilarity(text.toLowerCase(), prevText.toLowerCase()) > 0.8) return false;
-
   return true;
 }
 
 function getValidWordsCount(text) {
   if (isGibberish(text)) return 0;
-  if (isLaughSpam(text)) return 0;
+  if (isLaughOrSpam(text)) return 0;
   return text.trim().split(/\s+/).filter(w => w.length > 0).length;
 }
 
 // =============================================
-// ПАРСИНГ ВРЕМЕНИ БАНА
+// ПАРСИНГ ВРЕМЕНИ
 // =============================================
 function parseDuration(str) {
   const match = str.match(/^(\d+)(m|h|d)$/i);
   if (!match) return null;
-  const val = parseInt(match[1]);
-  const unit = match[2].toLowerCase();
-  if (unit === 'm') return val * 60 * 1000;
-  if (unit === 'h') return val * 3600 * 1000;
-  if (unit === 'd') return val * 86400 * 1000;
+  const val = parseInt(match[1]); const unit = match[2].toLowerCase();
+  if (unit === 'm') return val * 60000;
+  if (unit === 'h') return val * 3600000;
+  if (unit === 'd') return val * 86400000;
   return null;
 }
 
@@ -368,13 +365,12 @@ async function ensureUser(from) {
     await supabase.from('users').upsert({
       user_id: from.id, username: from.username || null, first_name: from.first_name || null
     }, { onConflict: 'user_id' });
-  } catch (e) { console.error('[DB] ensureUser:', e.message); }
+  } catch (e) { }
 }
 
 async function getUserState(userId, chatId) {
   try {
-    const { data } = await supabase.from('user_state').select('*')
-      .eq('user_id', userId).eq('chat_id', chatId).single();
+    const { data } = await supabase.from('user_state').select('*').eq('user_id', userId).eq('chat_id', chatId).single();
     return data;
   } catch (e) { return null; }
 }
@@ -388,13 +384,12 @@ async function updateUserState(userId, chatId, text, cooldownSec = 3) {
       last_message_text: text.substring(0, 300),
       cooldown_until: new Date(Date.now() + cooldownSec * 1000).toISOString()
     }, { onConflict: 'user_id,chat_id' });
-  } catch (e) { console.error('[DB] updateState:', e.message); }
+  } catch (e) { }
 }
 
 async function getChatStatsForUser(chatId, userId) {
   try {
-    const { data } = await supabase.from('chat_stats').select('*')
-      .eq('chat_id', chatId).eq('user_id', userId).single();
+    const { data } = await supabase.from('chat_stats').select('*').eq('chat_id', chatId).eq('user_id', userId).single();
     return data;
   } catch (e) { return null; }
 }
@@ -403,7 +398,35 @@ async function updateChatStats(chatId, userId, wpm) {
   try {
     const { error } = await supabase.rpc('update_chat_stats', { p_chat_id: chatId, p_user_id: userId, p_wpm: wpm });
     if (error) console.error('[DB] updateChatStats:', error.message);
-  } catch (e) { console.error('[DB] updateChatStats:', e.message); }
+  } catch (e) { }
+}
+
+// Сохраняем историю WPM для анализа тренда
+async function addWpmHistory(chatId, userId, wpm) {
+  try {
+    const { data } = await supabase.from('chat_stats').select('wpm_history').eq('chat_id', chatId).eq('user_id', userId).single();
+    let history = [];
+    if (data && data.wpm_history) {
+      history = Array.isArray(data.wpm_history) ? data.wpm_history : [];
+    }
+    history.push({ wpm, time: Date.now() });
+    // Храним последние 50 замеров
+    if (history.length > 50) history = history.slice(-50);
+    await supabase.from('chat_stats').update({ wpm_history: history, last_wpm_time: new Date().toISOString() }).eq('chat_id', chatId).eq('user_id', userId);
+  } catch (e) { }
+}
+
+// Анализ тренда: стал лучше или хуже
+function analyzeWpmTrend(history, currentWpm) {
+  if (!history || history.length < 3) return { trend: 'neutral', diff: 0 };
+  // Берём средний WPM за последние 5 замеров (исключая текущий)
+  const recent = history.slice(-6, -1);
+  if (recent.length === 0) return { trend: 'neutral', diff: 0 };
+  const avgRecent = recent.reduce((s, h) => s + h.wpm, 0) / recent.length;
+  const diff = currentWpm - avgRecent;
+  if (diff > 5) return { trend: 'up', diff: Math.round(diff) };
+  if (diff < -5) return { trend: 'down', diff: Math.round(Math.abs(diff)) };
+  return { trend: 'neutral', diff: 0 };
 }
 
 async function getChatTop(chatId, limit = 10) {
@@ -425,8 +448,7 @@ async function getChatSettings(chatId) {
   try {
     const { data, error } = await supabase.from('chat_settings').select('*').eq('chat_id', chatId).single();
     if (error && error.code === 'PGRST116') {
-      const { data: d } = await supabase.from('chat_settings')
-        .upsert({ chat_id: chatId }, { onConflict: 'chat_id' }).select().single();
+      const { data: d } = await supabase.from('chat_settings').upsert({ chat_id: chatId }, { onConflict: 'chat_id' }).select().single();
       return d || defaultSettings();
     }
     if (data && data.autowpm_enabled === undefined) data.autowpm_enabled = true;
@@ -454,8 +476,7 @@ async function getUserTitles(userId) {
 async function grantTitle(userId, titleId) {
   try {
     const { error } = await supabase.from('user_titles').upsert(
-      { user_id: userId, title_id: titleId },
-      { onConflict: 'user_id,title_id' }
+      { user_id: userId, title_id: titleId }, { onConflict: 'user_id,title_id' }
     );
     return !error;
   } catch (e) { return false; }
@@ -467,9 +488,7 @@ async function hasTitle(userId, titleId) {
 }
 
 async function setActiveTitle(userId, titleId) {
-  try {
-    await supabase.from('users').update({ active_title: titleId }).eq('user_id', userId);
-  } catch (e) { }
+  try { await supabase.from('users').update({ active_title: titleId }).eq('user_id', userId); } catch (e) { }
 }
 
 async function getActiveTitle(userId) {
@@ -498,73 +517,48 @@ async function banRating(userId, bannedBy, durationMs) {
   try {
     const until = new Date(Date.now() + durationMs).toISOString();
     await supabase.from('rating_bans').upsert(
-      { user_id: userId, banned_until: until, banned_by: bannedBy },
-      { onConflict: 'user_id' }
+      { user_id: userId, banned_until: until, banned_by: bannedBy }, { onConflict: 'user_id' }
     );
     return until;
   } catch (e) { return null; }
 }
 
 async function unbanRating(userId) {
-  try {
-    await supabase.from('rating_bans').delete().eq('user_id', userId);
-    return true;
-  } catch (e) { return false; }
+  try { await supabase.from('rating_bans').delete().eq('user_id', userId); return true; } catch (e) { return false; }
 }
 
 // =============================================
-// ПРОВЕРКА И ВЫДАЧА ТИТУЛОВ
+// ПРОВЕРКА ТИТУЛОВ — ВЫДАЁТ ТОЛЬКО 1 НОВЫЙ ЗА РАЗ
 // =============================================
-async function checkAndGrantTitles(chatId, userId, wpm, messagesCount, settings) {
-  const newTitles = [];
+async function checkAndGrantOneTitle(chatId, userId, stats, settings) {
+  const userTitles = await getUserTitles(userId);
 
-  // За активность
-  if (messagesCount >= 100 && !(await hasTitle(userId, 'writer'))) {
-    await grantTitle(userId, 'writer'); newTitles.push('writer');
-  }
-  if (messagesCount >= 500 && !(await hasTitle(userId, 'tryhard'))) {
-    await grantTitle(userId, 'tryhard'); newTitles.push('tryhard');
-  }
-  if (messagesCount >= 2000 && !(await hasTitle(userId, 'lives_in_chat'))) {
-    await grantTitle(userId, 'lives_in_chat'); newTitles.push('lives_in_chat');
-  }
+  // Порядок приоритета: сначала самые крутые
+  const checkOrder = [
+    'legend', 'lightning', 'rocket', 'racer', 'runner', 'snail',
+    'lives_in_chat', 'tryhard', 'writer'
+  ];
 
-  // За скорость (best_wpm)
-  if (wpm < 15 && !(await hasTitle(userId, 'snail'))) {
-    await grantTitle(userId, 'snail'); newTitles.push('snail');
-  }
-  if (wpm >= 60 && !(await hasTitle(userId, 'runner'))) {
-    await grantTitle(userId, 'runner'); newTitles.push('runner');
-  }
-  if (wpm >= 80 && !(await hasTitle(userId, 'racer'))) {
-    await grantTitle(userId, 'racer'); newTitles.push('racer');
-  }
-  if (wpm >= 100 && !(await hasTitle(userId, 'rocket'))) {
-    await grantTitle(userId, 'rocket'); newTitles.push('rocket');
-  }
-  if (wpm >= 150 && !(await hasTitle(userId, 'lightning'))) {
-    await grantTitle(userId, 'lightning'); newTitles.push('lightning');
-  }
-  if (wpm >= 200 && !(await hasTitle(userId, 'legend'))) {
-    await grantTitle(userId, 'legend'); newTitles.push('legend');
+  for (const titleId of checkOrder) {
+    if (userTitles.includes(titleId)) continue;
+    const t = ALL_TITLES[titleId];
+    if (t && t.check && t.check(stats)) {
+      await grantTitle(userId, titleId);
+      return titleId;
+    }
   }
 
-  // Ошибка системы — WPM > лимита (но мы его обрезаем, поэтому если сырой > лимита)
-  if (wpm > (settings.max_wpm_limit || 300) && !(await hasTitle(userId, 'system_error'))) {
-    await grantTitle(userId, 'system_error'); newTitles.push('system_error');
+  // Редкие — с очень маленькими шансами
+  if (!userTitles.includes('glitch') && Math.random() < 0.001) {
+    await grantTitle(userId, 'glitch');
+    return 'glitch';
+  }
+  if (!userTitles.includes('observed') && Math.random() < 0.0005) {
+    await grantTitle(userId, 'observed');
+    return 'observed';
   }
 
-  // Глитч — 1% шанс
-  if (Math.random() < 0.01 && !(await hasTitle(userId, 'glitch'))) {
-    await grantTitle(userId, 'glitch'); newTitles.push('glitch');
-  }
-
-  // Наблюдаемый — 0.5% шанс
-  if (Math.random() < 0.005 && !(await hasTitle(userId, 'observed'))) {
-    await grantTitle(userId, 'observed'); newTitles.push('observed');
-  }
-
-  return newTitles;
+  return null;
 }
 
 // =============================================
@@ -573,11 +567,11 @@ async function checkAndGrantTitles(chatId, userId, wpm, messagesCount, settings)
 async function nullRating(targetUserId, newValue) {
   try {
     const updateData = { best_wpm: newValue, avg_wpm: newValue, last_wpm: newValue };
-    if (newValue === 0) { updateData.messages_count = 0; updateData.total_wpm_sum = 0; }
+    if (newValue === 0) { updateData.messages_count = 0; updateData.total_wpm_sum = 0; updateData.wpm_history = []; }
     const { error } = await supabase.from('chat_stats').update(updateData).eq('user_id', targetUserId);
     if (error) { console.error('[DB] nullRating:', error.message); return false; }
     return true;
-  } catch (e) { console.error('[DB] nullRating:', e.message); return false; }
+  } catch (e) { return false; }
 }
 
 // =============================================
@@ -602,8 +596,6 @@ async function acceptDuel(duelId, user2Id) {
   } catch (e) { return null; }
 }
 
-const activeSpamDuels = {};
-
 async function finishSpamDuel(chatId, duelId) {
   const state = activeSpamDuels[duelId];
   if (!state) return;
@@ -620,27 +612,29 @@ async function finishSpamDuel(chatId, duelId) {
     }).eq('id', duelId);
   } catch (e) { }
 
-  // Титулы за дуэль
   if (winnerId) {
     try {
-      const { data: wins } = await supabase.from('duels').select('id')
-        .eq('winner_id', winnerId).eq('status', 'finished');
+      const { data: wins } = await supabase.from('duels').select('id').eq('winner_id', winnerId).eq('status', 'finished');
       const winCount = wins ? wins.length : 0;
       if (winCount >= 1 && !(await hasTitle(winnerId, 'duelist'))) {
         await grantTitle(winnerId, 'duelist');
         const wInfo = await getUserInfo(winnerId);
-        bot.sendMessage(chatId, `🎉 <b>${esc(getNameFromInfo(wInfo))}</b> получил титул ⚔️ <b>Дуэлянт</b>!\nПерейди в бота чтобы надеть →`, {
+        const me = await bot.getMe();
+        const sent = await bot.sendMessage(chatId, `🎉 <b>${esc(getNameFromInfo(wInfo))}</b> получил титул ⚔️ <b>Дуэлянт</b>!`, {
           parse_mode: 'HTML',
-          reply_markup: { inline_keyboard: [[{ text: '🎖 Мои титулы', url: `https://t.me/${(await bot.getMe()).username}?start=titles` }]] }
+          reply_markup: { inline_keyboard: [[{ text: '🎖 Надеть титул', url: `https://t.me/${me.username}?start=titles` }]] }
         });
+        titleNotifications.push({ chatId, msgId: sent.message_id, time: Date.now() });
       }
       if (winCount >= 10 && !(await hasTitle(winnerId, 'champion'))) {
         await grantTitle(winnerId, 'champion');
         const wInfo = await getUserInfo(winnerId);
-        bot.sendMessage(chatId, `🎉 <b>${esc(getNameFromInfo(wInfo))}</b> получил титул 🏆 <b>Чемпион</b>!\nПерейди в бота чтобы надеть →`, {
+        const me = await bot.getMe();
+        const sent = await bot.sendMessage(chatId, `🎉 <b>${esc(getNameFromInfo(wInfo))}</b> получил титул 🏆 <b>Чемпион</b>!`, {
           parse_mode: 'HTML',
-          reply_markup: { inline_keyboard: [[{ text: '🎖 Мои титулы', url: `https://t.me/${(await bot.getMe()).username}?start=titles` }]] }
+          reply_markup: { inline_keyboard: [[{ text: '🎖 Надеть титул', url: `https://t.me/${me.username}?start=titles` }]] }
         });
+        titleNotifications.push({ chatId, msgId: sent.message_id, time: Date.now() });
       }
     } catch (e) { }
   }
@@ -662,21 +656,18 @@ ${wt}
 }
 
 // =============================================
-// ХЕЛПЕР: получить ID юзера из reply или @username
+// ХЕЛПЕР: target user
 // =============================================
 async function resolveTargetUser(msg, extraText) {
-  // Из ответа на сообщение
   if (msg.reply_to_message && msg.reply_to_message.from) {
     await ensureUser(msg.reply_to_message.from);
     return { userId: msg.reply_to_message.from.id, username: msg.reply_to_message.from.username, firstName: msg.reply_to_message.from.first_name };
   }
-  // Из @username в тексте
   if (extraText) {
     const uMatch = extraText.match(/@(\S+)/);
     if (uMatch) {
-      const username = uMatch[1];
       try {
-        const { data } = await supabase.from('users').select('*').eq('username', username).single();
+        const { data } = await supabase.from('users').select('*').eq('username', uMatch[1]).single();
         if (data) return { userId: data.user_id, username: data.username, firstName: data.first_name };
       } catch (e) { }
     }
@@ -685,46 +676,27 @@ async function resolveTargetUser(msg, extraText) {
 }
 
 // =============================================
-// КОМАНДЫ
+// ОТПРАВКА УВЕДОМЛЕНИЯ О ТИТУЛЕ (с автоудалением)
 // =============================================
-bot.onText(/\/start(.*)/, async (msg, match) => {
-  if (msg.chat.type !== 'private') return;
-  await ensureUser(msg.from);
-  const param = (match[1] || '').trim();
-
-  if (param === 'titles') {
-    return sendTitlesMenu(msg.chat.id, msg.from.id);
-  }
-
-  bot.sendMessage(msg.chat.id, `
-💀 <b>TYPEWAR</b> активен
-
-я считаю твою скорость печати
-⌨️ <b>WPM</b> • ⚔️ <b>дуэли</b> • 🏆 <b>рейтинг</b>
-
-добавь меня в чат и узнай, кто здесь самый быстрый
-
-/titles — твои титулы
-  `, { parse_mode: 'HTML' });
-});
-
-bot.on('new_chat_members', async (msg) => {
+async function sendTitleNotification(chatId, userName, titleId) {
+  const t = ALL_TITLES[titleId];
+  if (!t) return;
   try {
     const me = await bot.getMe();
-    if (!msg.new_chat_members.some(m => m.id === me.id)) return;
-    await getChatSettings(msg.chat.id);
-    bot.sendMessage(msg.chat.id, `💀 <b>TYPEWAR</b> активирован\n\nсчитаю WPM, провожу дуэли на скорость.`, { parse_mode: 'HTML' });
+    const sent = await bot.sendMessage(chatId, `🎉 <b>${esc(userName)}</b> получил титул ${t.emoji} <b>${t.name}</b>!`, {
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[{ text: '🎖 Надеть титул', url: `https://t.me/${me.username}?start=titles` }]] }
+    });
+    titleNotifications.push({ chatId, msgId: sent.message_id, time: Date.now() });
   } catch (e) { }
-});
+}
 
 // =============================================
-// /titles — МЕНЮ ТИТУЛОВ
+// /titles МЕНЮ
 // =============================================
 async function sendTitlesMenu(chatId, userId) {
   const userTitles = await getUserTitles(userId);
   const activeT = await getActiveTitle(userId);
-
-  // Для OWNER — все доступны
   const isOwner = userId === OWNER_ID;
 
   let text = `🎖 <b>ТВОИ ТИТУЛЫ</b>\n━━━━━━━━━━━━━━━\n`;
@@ -750,18 +722,54 @@ async function sendTitlesMenu(chatId, userId) {
     if (row.length) keyboard.push([...row]);
   }
 
-  if (activeT) {
-    keyboard.push([{ text: '❌ Снять титул', callback_data: 'title_unequip' }]);
-  }
+  if (activeT) keyboard.push([{ text: '❌ Снять титул', callback_data: 'title_unequip' }]);
 
   bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboard } });
 }
 
+// =============================================
+// КОМАНДЫ
+// =============================================
+bot.onText(/\/start(.*)/, async (msg, match) => {
+  if (msg.chat.type !== 'private') return;
+  await ensureUser(msg.from);
+  const param = (match[1] || '').trim();
+  if (param === 'titles') return sendTitlesMenu(msg.chat.id, msg.from.id);
+  bot.sendMessage(msg.chat.id, `
+💀 <b>TYPEWAR</b> активен
+
+я считаю твою скорость печати
+⌨️ <b>WPM</b> • ⚔️ <b>дуэли</b> • 🏆 <b>рейтинг</b>
+
+добавь меня в чат и узнай, кто здесь самый быстрый
+
+/titles — твои титулы
+  `, { parse_mode: 'HTML' });
+});
+
+bot.on('new_chat_members', async (msg) => {
+  try {
+    const me = await bot.getMe();
+    if (!msg.new_chat_members.some(m => m.id === me.id)) return;
+    await getChatSettings(msg.chat.id);
+    bot.sendMessage(msg.chat.id, `💀 <b>TYPEWAR</b> активирован\n\nсчитаю WPM, провожу дуэли на скорость.`, { parse_mode: 'HTML' });
+  } catch (e) { }
+});
+
+// /titles
 bot.onText(/\/titles/, async (msg) => {
   await ensureUser(msg.from);
   if (msg.chat.type !== 'private') {
+    const chatId = msg.chat.id;
+    const now = Date.now();
+    if (titlesCooldowns[chatId + '_' + msg.from.id] && now - titlesCooldowns[chatId + '_' + msg.from.id] < 5000) {
+      const left = Math.ceil((5000 - (now - titlesCooldowns[chatId + '_' + msg.from.id])) / 1000);
+      bot.sendMessage(chatId, `⏱ Подожди <b>${left}с</b>`, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+      return;
+    }
+    titlesCooldowns[chatId + '_' + msg.from.id] = now;
     const me = await bot.getMe();
-    bot.sendMessage(msg.chat.id, `🎖 Для управления титулами перейди в бота`, {
+    bot.sendMessage(chatId, `🎖 Для управления титулами перейди в бота`, {
       reply_to_message_id: msg.message_id,
       reply_markup: { inline_keyboard: [[{ text: '🎖 Мои титулы', url: `https://t.me/${me.username}?start=titles` }]] }
     });
@@ -771,7 +779,7 @@ bot.onText(/\/titles/, async (msg) => {
 });
 
 // =============================================
-// CALLBACK: ТИТУЛЫ
+// CALLBACK QUERY
 // =============================================
 bot.on('callback_query', async (query) => {
   const data = query.data;
@@ -783,14 +791,12 @@ bot.on('callback_query', async (query) => {
   if (data.startsWith('title_info_')) {
     const titleId = data.replace('title_info_', '');
     const t = ALL_TITLES[titleId];
-    if (!t) { bot.answerCallbackQuery(query.id, { text: 'Титул не найден' }); return; }
-
+    if (!t) { bot.answerCallbackQuery(query.id, { text: 'Не найден' }); return; }
     const isOwner = userId === OWNER_ID;
     const has = isOwner || await hasTitle(userId, titleId);
     const activeT = await getActiveTitle(userId);
 
-    let text = `${t.emoji} <b>${t.name}</b>\n\n`;
-    text += `📋 <b>Как получить:</b> ${t.desc}\n\n`;
+    let text = `${t.emoji} <b>${t.name}</b>\n\n📋 <b>Как получить:</b> ${t.desc}\n\n`;
     text += has ? `✅ <b>Титул доступен!</b>` : `❌ <b>Титул ещё не получен</b>`;
 
     const kb = [];
@@ -813,26 +819,20 @@ bot.on('callback_query', async (query) => {
     const titleId = data.replace('title_equip_', '');
     const isOwner = userId === OWNER_ID;
     const has = isOwner || await hasTitle(userId, titleId);
-    if (!has) {
-      bot.answerCallbackQuery(query.id, { text: '❌ У тебя нет этого титула!', show_alert: true });
-      return;
-    }
-    // Для OWNER — грантим автоматически если нет в базе
-    if (isOwner && !(await hasTitle(userId, titleId))) {
-      await grantTitle(userId, titleId);
-    }
+    if (!has) { bot.answerCallbackQuery(query.id, { text: '❌ Нет титула!', show_alert: true }); return; }
+    if (isOwner && !(await hasTitle(userId, titleId))) await grantTitle(userId, titleId);
     await setActiveTitle(userId, titleId);
-    bot.answerCallbackQuery(query.id, { text: `✅ Титул ${ALL_TITLES[titleId]?.name} надет!` });
-    sendTitlesMenu(chatId, userId);
+    bot.answerCallbackQuery(query.id, { text: `✅ ${ALL_TITLES[titleId]?.name} надет!` });
     bot.deleteMessage(chatId, msgId).catch(() => {});
+    sendTitlesMenu(chatId, userId);
     return;
   }
 
   if (data === 'title_unequip') {
     await setActiveTitle(userId, null);
     bot.answerCallbackQuery(query.id, { text: '❌ Титул снят' });
-    sendTitlesMenu(chatId, userId);
     bot.deleteMessage(chatId, msgId).catch(() => {});
+    sendTitlesMenu(chatId, userId);
     return;
   }
 
@@ -843,10 +843,7 @@ bot.on('callback_query', async (query) => {
     return;
   }
 
-  if (data === 'noop') {
-    bot.answerCallbackQuery(query.id);
-    return;
-  }
+  if (data === 'noop') { bot.answerCallbackQuery(query.id); return; }
 
   // ====== ДУЭЛИ ======
   if (data.startsWith('d_min_')) {
@@ -884,26 +881,21 @@ bot.on('callback_query', async (query) => {
     const s = await getChatSettings(chatId);
     let key, newVal, label;
 
-    if (data === 'set_trolling') {
-      key = 'trolling_enabled'; newVal = !s.trolling_enabled; label = '😈 Троллинг';
-    } else if (data === 'set_duels') {
-      key = 'duels_enabled'; newVal = !s.duels_enabled; label = '⚔️ Дуэли';
-    } else if (data === 'set_autowpm') {
-      key = 'autowpm_enabled'; newVal = !(s.autowpm_enabled !== false); label = '📊 Авто-WPM';
-    }
+    if (data === 'set_trolling') { key = 'trolling_enabled'; newVal = !s.trolling_enabled; label = '😈 Троллинг'; }
+    else if (data === 'set_duels') { key = 'duels_enabled'; newVal = !s.duels_enabled; label = '⚔️ Дуэли'; }
+    else if (data === 'set_autowpm') { key = 'autowpm_enabled'; newVal = !(s.autowpm_enabled !== false); label = '📊 Авто-WPM'; }
 
     if (key) {
       await setChatSetting(chatId, key, newVal);
-      bot.answerCallbackQuery(query.id, { text: `${label}: ${newVal ? '✅ ВКЛ' : '❌ ВЫКЛ'}` });
-      // Обновляем сообщение настроек
+      bot.answerCallbackQuery(query.id, { text: `${label}: ${newVal ? '✅' : '❌'}` });
       const s2 = await getChatSettings(chatId);
-      const autowpm2 = s2.autowpm_enabled !== undefined ? s2.autowpm_enabled : true;
+      const aw = s2.autowpm_enabled !== undefined ? s2.autowpm_enabled : true;
       bot.editMessageText(`
 ⚙️ <b>TYPEWAR — Настройки</b>
 ━━━━━━━━━━━━━━━
 😈 Троллинг: <b>${s2.trolling_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>
 ⚔️ Дуэли: <b>${s2.duels_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>
-📊 Авто-WPM: <b>${autowpm2 ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>
+📊 Авто-WPM: <b>${aw ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>
 📏 Мин. символов: <b>${s2.min_chars}</b>
 ⏱ Кулдаун: <b>${s2.cooldown_seconds}с</b>
 🚫 Макс WPM: <b>${s2.max_wpm_limit}</b>
@@ -912,13 +904,9 @@ bot.on('callback_query', async (query) => {
         chat_id: chatId, message_id: msgId, parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
-            [
-              { text: `😈 Троллинг ${s2.trolling_enabled ? '✅' : '❌'}`, callback_data: 'set_trolling' },
-              { text: `⚔️ Дуэли ${s2.duels_enabled ? '✅' : '❌'}`, callback_data: 'set_duels' }
-            ],
-            [
-              { text: `📊 Авто-WPM ${autowpm2 ? '✅' : '❌'}`, callback_data: 'set_autowpm' }
-            ]
+            [{ text: `😈 Троллинг ${s2.trolling_enabled ? '✅' : '❌'}`, callback_data: 'set_trolling' },
+             { text: `⚔️ Дуэли ${s2.duels_enabled ? '✅' : '❌'}`, callback_data: 'set_duels' }],
+            [{ text: `📊 Авто-WPM ${aw ? '✅' : '❌'}`, callback_data: 'set_autowpm' }]
           ]
         }
       }).catch(() => {});
@@ -940,7 +928,7 @@ bot.onText(/\/wpm/, async (msg) => {
   }
   const ban = await isRatingBanned(userId);
   let banText = '';
-  if (ban) { banText = `\n\n🔒 <b>Поступление WPM заморожено</b>\nДо: ${new Date(ban.banned_until).toLocaleString('ru')}`; }
+  if (ban) banText = `\n\n🔒 <b>Поступление WPM заморожено</b>\nДо: ${new Date(ban.banned_until).toLocaleString('ru')}`;
 
   bot.sendMessage(chatId, `
 ${getWpmEmoji(stats.best_wpm)} <b>${esc(getName(msg))}</b>
@@ -961,19 +949,16 @@ bot.onText(/\/profile/, async (msg) => {
   await ensureUser(msg.from);
   if (msg.chat.type === 'private') { bot.sendMessage(chatId, '💀 Работает только в чатах'); return; }
   const stats = await getChatStatsForUser(chatId, userId);
-
   const activeT = await getActiveTitle(userId);
   let titleText = '<i>нет титула</i>';
-  if (activeT && ALL_TITLES[activeT]) {
-    titleText = `${ALL_TITLES[activeT].emoji} <b>${ALL_TITLES[activeT].name}</b>`;
-  }
+  if (activeT && ALL_TITLES[activeT]) titleText = `${ALL_TITLES[activeT].emoji} <b>${ALL_TITLES[activeT].name}</b>`;
 
   const ban = await isRatingBanned(userId);
   let banText = '';
-  if (ban) { banText = `\n🔒 <b>Поступление WPM на ваш аккаунт заморожено</b>\nПоступление рейтинга приостановлено до ${new Date(ban.banned_until).toLocaleString('ru')}`; }
+  if (ban) banText = `\n🔒 <b>Поступление WPM заморожено</b>\nДо ${new Date(ban.banned_until).toLocaleString('ru')}`;
 
+  const me = await bot.getMe();
   if (!stats || stats.messages_count === 0) {
-    const me = await bot.getMe();
     bot.sendMessage(chatId, `
 👤 <b>${esc(getName(msg))}</b>
 🏷 Титул: ${titleText}
@@ -985,7 +970,6 @@ bot.onText(/\/profile/, async (msg) => {
     return;
   }
 
-  const me = await bot.getMe();
   bot.sendMessage(chatId, `
 👤 <b>${esc(getName(msg))}</b>
 🏷 Титул: ${titleText}
@@ -1001,13 +985,12 @@ bot.onText(/\/profile/, async (msg) => {
 });
 
 // =============================================
-// /top — с кулдауном 30 сек
+// /top — кулдаун 30 сек
 // =============================================
 bot.onText(/\/top/, async (msg) => {
   const chatId = msg.chat.id;
   if (msg.chat.type === 'private') { bot.sendMessage(chatId, '🏆 Только в чатах'); return; }
 
-  // Кулдаун 30 сек на весь чат
   const now = Date.now();
   if (topCooldowns[chatId] && now - topCooldowns[chatId] < 30000) {
     const left = Math.ceil((30000 - (now - topCooldowns[chatId])) / 1000);
@@ -1032,11 +1015,11 @@ bot.onText(/\/top/, async (msg) => {
 });
 
 // =============================================
-// /duel
+// ДУЭЛИ
 // =============================================
 bot.onText(/\/duel/, async (msg) => {
   const chatId = msg.chat.id; const userId = msg.from.id;
-  if (msg.chat.type === 'private') { bot.sendMessage(chatId, '⚔️ Дуэли только в чатах'); return; }
+  if (msg.chat.type === 'private') { bot.sendMessage(chatId, '⚔️ Только в чатах'); return; }
   const settings = await getChatSettings(chatId);
   if (!settings.duels_enabled) { bot.sendMessage(chatId, '⚔️ Дуэли отключены'); return; }
   await ensureUser(msg.from);
@@ -1054,10 +1037,9 @@ bot.onText(/\/duel/, async (msg) => {
 ━━━━━━━━━━━━━━━
 ${esc(getNameFromInfo(u1))} ⚡ VS ⚡ ${esc(getName(msg))}
 
-📝 <b>ПРАВИЛА:</b>
-Кто отправит больше сообщений за <b>2 минуты</b>!
-Минимум слов в сообщении: <b>${minWords}</b>
-<i>Спам и одинаковые буквы не считаются!</i>
+📝 Кто отправит больше сообщений за <b>2 минуты</b>!
+Минимум слов: <b>${minWords}</b>
+<i>Спам не считается!</i>
 
 ⏱ <b>ВРЕМЯ ПОШЛО!</b>
         `, { parse_mode: 'HTML' });
@@ -1071,7 +1053,7 @@ ${esc(getNameFromInfo(u1))} ⚡ VS ⚡ ${esc(getName(msg))}
     return;
   }
 
-  bot.sendMessage(chatId, `⚔️ <b>Выбери минимум слов в сообщении:</b>`, {
+  bot.sendMessage(chatId, `⚔️ <b>Выбери минимум слов:</b>`, {
     parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [
@@ -1102,8 +1084,7 @@ bot.onText(/\/test/, async (msg) => {
   await supabase.from('user_state').upsert({
     user_id: userId, chat_id: chatId,
     last_message_time: new Date().toISOString(),
-    last_message_length: 0,
-    last_message_text: '__TEST__:' + testText
+    last_message_length: 0, last_message_text: '__TEST__:' + testText
   }, { onConflict: 'user_id,chat_id' });
 
   bot.sendMessage(chatId, `
@@ -1119,7 +1100,7 @@ bot.onText(/\/test/, async (msg) => {
 });
 
 // =============================================
-// /settings — с инлайн кнопками
+// /settings
 // =============================================
 bot.onText(/\/settings/, async (msg) => {
   const chatId = msg.chat.id;
@@ -1131,14 +1112,14 @@ bot.onText(/\/settings/, async (msg) => {
     }
   } catch (e) { }
   const s = await getChatSettings(chatId);
-  const autowpm = s.autowpm_enabled !== undefined ? s.autowpm_enabled : true;
+  const aw = s.autowpm_enabled !== undefined ? s.autowpm_enabled : true;
 
   bot.sendMessage(chatId, `
 ⚙️ <b>TYPEWAR — Настройки</b>
 ━━━━━━━━━━━━━━━
 😈 Троллинг: <b>${s.trolling_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>
 ⚔️ Дуэли: <b>${s.duels_enabled ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>
-📊 Авто-WPM: <b>${autowpm ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>
+📊 Авто-WPM: <b>${aw ? '✅ ВКЛ' : '❌ ВЫКЛ'}</b>
 📏 Мин. символов: <b>${s.min_chars}</b>
 ⏱ Кулдаун: <b>${s.cooldown_seconds}с</b>
 🚫 Макс WPM: <b>${s.max_wpm_limit}</b>
@@ -1147,13 +1128,9 @@ bot.onText(/\/settings/, async (msg) => {
     parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [
-        [
-          { text: `😈 Троллинг ${s.trolling_enabled ? '✅' : '❌'}`, callback_data: 'set_trolling' },
-          { text: `⚔️ Дуэли ${s.duels_enabled ? '✅' : '❌'}`, callback_data: 'set_duels' }
-        ],
-        [
-          { text: `📊 Авто-WPM ${autowpm ? '✅' : '❌'}`, callback_data: 'set_autowpm' }
-        ]
+        [{ text: `😈 Троллинг ${s.trolling_enabled ? '✅' : '❌'}`, callback_data: 'set_trolling' },
+         { text: `⚔️ Дуэли ${s.duels_enabled ? '✅' : '❌'}`, callback_data: 'set_duels' }],
+        [{ text: `📊 Авто-WPM ${aw ? '✅' : '❌'}`, callback_data: 'set_autowpm' }]
       ]
     }
   });
@@ -1162,127 +1139,71 @@ bot.onText(/\/settings/, async (msg) => {
 // =============================================
 // 👑 OWNER COMMANDS
 // =============================================
-
-// /null_rating @user 0  или  ответом на сообщение /null_rating 0
 bot.onText(/\/null_rating(.*)/, async (msg, match) => {
   if (msg.from.id !== OWNER_ID) return;
   const chatId = msg.chat.id;
   const args = (match[1] || '').trim();
 
-  // Парсим
-  let target = null;
-  let newValue = 0;
+  let target = null; let newValue = 0;
 
-  // Формат: /null_rating @user 50
   const m1 = args.match(/@(\S+)\s+(\d+)/);
-  // Формат: /null_rating 50 (ответом)
   const m2 = args.match(/^(\d+)$/);
 
   if (m1) {
-    const username = m1[1];
     newValue = parseInt(m1[2]);
-    try {
-      const { data } = await supabase.from('users').select('*').eq('username', username).single();
-      if (data) target = { userId: data.user_id, username: data.username };
-    } catch (e) { }
+    try { const { data } = await supabase.from('users').select('*').eq('username', m1[1]).single(); if (data) target = { userId: data.user_id, username: data.username }; } catch (e) { }
   } else if (m2 && msg.reply_to_message) {
     newValue = parseInt(m2[1]);
-    const from = msg.reply_to_message.from;
-    await ensureUser(from);
+    const from = msg.reply_to_message.from; await ensureUser(from);
     target = { userId: from.id, username: from.username };
-  } else if (!args) {
-    // Просто /null_rating ответом
-    if (msg.reply_to_message) {
-      const from = msg.reply_to_message.from;
-      await ensureUser(from);
-      target = { userId: from.id, username: from.username };
-      newValue = 0;
-    }
+  } else if (!args && msg.reply_to_message) {
+    const from = msg.reply_to_message.from; await ensureUser(from);
+    target = { userId: from.id, username: from.username }; newValue = 0;
   }
 
   if (!target) {
-    bot.sendMessage(chatId, `
-🔧 <b>Использование:</b>
-<code>/null_rating @username 0</code>
-<code>/null_rating 50</code> (ответом на сообщение)
-<code>/null_rating @username 50</code>
-    `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+    bot.sendMessage(chatId, `🔧 <b>Использование:</b>\n<code>/null_rating @user 0</code>\n<code>/null_rating 50</code> (ответом)\n<code>/null_rating</code> (ответом, обнулит)`, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
     return;
   }
 
   const success = await nullRating(target.userId, newValue);
-  if (success) {
-    bot.sendMessage(chatId, `
-🔧 <b>РЕЙТИНГ ОБНУЛЁН</b>
-━━━━━━━━━━━━━━━
-👤 Юзер: <b>${target.username ? '@' + esc(target.username) : 'ID:' + target.userId}</b>
-📊 Новое значение: <b>${newValue}</b>
-${newValue === 0 ? '💀 Всё обнулено.' : `⚡ WPM: ${newValue}`}
-    `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
-  } else {
-    bot.sendMessage(chatId, `❌ Ошибка`, { reply_to_message_id: msg.message_id });
-  }
+  bot.sendMessage(chatId, success
+    ? `🔧 <b>РЕЙТИНГ ОБНУЛЁН</b>\n👤 <b>${target.username ? '@' + esc(target.username) : 'ID:' + target.userId}</b>\n📊 Значение: <b>${newValue}</b>\n${newValue === 0 ? '💀 Всё обнулено.' : `⚡ WPM: ${newValue}`}`
+    : `❌ Ошибка`, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
 });
 
-// /ban_rating @user 30m  или  ответом /ban_rating 30m
 bot.onText(/\/ban_rating(.*)/, async (msg, match) => {
   if (msg.from.id !== OWNER_ID) return;
   const chatId = msg.chat.id;
   const args = (match[1] || '').trim();
 
-  let target = null;
-  let durationStr = null;
-
-  // @user 30m
+  let target = null; let durationStr = null;
   const m1 = args.match(/@(\S+)\s+(\d+[mhd])/i);
-  // 30m ответом
   const m2 = args.match(/^(\d+[mhd])$/i);
 
   if (m1) {
-    const username = m1[1];
     durationStr = m1[2];
-    try {
-      const { data } = await supabase.from('users').select('*').eq('username', username).single();
-      if (data) target = { userId: data.user_id, username: data.username };
-    } catch (e) { }
+    try { const { data } = await supabase.from('users').select('*').eq('username', m1[1]).single(); if (data) target = { userId: data.user_id, username: data.username }; } catch (e) { }
   } else if (m2 && msg.reply_to_message) {
     durationStr = m2[1];
-    const from = msg.reply_to_message.from;
-    await ensureUser(from);
+    const from = msg.reply_to_message.from; await ensureUser(from);
     target = { userId: from.id, username: from.username };
   }
 
   if (!target || !durationStr) {
-    bot.sendMessage(chatId, `
-🔒 <b>Использование:</b>
-<code>/ban_rating @user 30m</code>
-<code>/ban_rating 1h</code> (ответом)
-m=минуты h=часы d=дни
-    `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+    bot.sendMessage(chatId, `🔒 <b>Использование:</b>\n<code>/ban_rating @user 30m</code>\n<code>/ban_rating 1h</code> (ответом)\nm=минуты h=часы d=дни`, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
     return;
   }
 
   const durationMs = parseDuration(durationStr);
-  if (!durationMs) {
-    bot.sendMessage(chatId, '❌ Неверный формат. Пример: 30m, 1h, 2d', { reply_to_message_id: msg.message_id });
-    return;
-  }
+  if (!durationMs) { bot.sendMessage(chatId, '❌ Неверный формат. Пример: 30m, 1h, 2d', { reply_to_message_id: msg.message_id }); return; }
 
   const until = await banRating(target.userId, msg.from.id, durationMs);
-  if (until) {
-    bot.sendMessage(chatId, `
-🔒 <b>РЕЙТИНГ ЗАМОРОЖЕН</b>
-━━━━━━━━━━━━━━━
-👤 Юзер: <b>${target.username ? '@' + esc(target.username) : 'ID:' + target.userId}</b>
-⏱ На: <b>${formatDuration(durationMs)}</b>
-📅 До: <b>${new Date(until).toLocaleString('ru')}</b>
-    `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
-  } else {
-    bot.sendMessage(chatId, '❌ Ошибка', { reply_to_message_id: msg.message_id });
-  }
+  bot.sendMessage(chatId, until
+    ? `🔒 <b>РЕЙТИНГ ЗАМОРОЖЕН</b>\n👤 <b>${target.username ? '@' + esc(target.username) : 'ID:' + target.userId}</b>\n⏱ На: <b>${formatDuration(durationMs)}</b>\n📅 До: <b>${new Date(until).toLocaleString('ru')}</b>`
+    : '❌ Ошибка', { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
 });
 
-// /unban_rating @user  или  ответом
 bot.onText(/\/unban_rating(.*)/, async (msg, match) => {
   if (msg.from.id !== OWNER_ID) return;
   const chatId = msg.chat.id;
@@ -1291,28 +1212,20 @@ bot.onText(/\/unban_rating(.*)/, async (msg, match) => {
   let target = null;
   const uMatch = args.match(/@(\S+)/);
   if (uMatch) {
-    try {
-      const { data } = await supabase.from('users').select('*').eq('username', uMatch[1]).single();
-      if (data) target = { userId: data.user_id, username: data.username };
-    } catch (e) { }
+    try { const { data } = await supabase.from('users').select('*').eq('username', uMatch[1]).single(); if (data) target = { userId: data.user_id, username: data.username }; } catch (e) { }
   } else if (msg.reply_to_message) {
-    const from = msg.reply_to_message.from;
-    await ensureUser(from);
+    const from = msg.reply_to_message.from; await ensureUser(from);
     target = { userId: from.id, username: from.username };
   }
 
   if (!target) {
-    bot.sendMessage(chatId, `
-🔓 <b>Использование:</b>
-<code>/unban_rating @user</code>
-Или ответом на сообщение
-    `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+    bot.sendMessage(chatId, `🔓 <b>Использование:</b>\n<code>/unban_rating @user</code>\nИли ответом`, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
     return;
   }
 
   const ok = await unbanRating(target.userId);
   bot.sendMessage(chatId, ok
-    ? `🔓 Рейтинг <b>${target.username ? '@' + esc(target.username) : 'ID:' + target.userId}</b> разморожен!`
+    ? `🔓 <b>${target.username ? '@' + esc(target.username) : 'ID:' + target.userId}</b> — рейтинг разморожен!`
     : '❌ Ошибка', { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
 });
 
@@ -1322,7 +1235,7 @@ bot.onText(/\/unban_rating(.*)/, async (msg, match) => {
 bot.onText(/\/help/, async (msg) => {
   bot.sendMessage(msg.chat.id, `
 💀 <b>TYPEWAR — ПОМОЩЬ</b>
-Автоматически считаю WPM по всем сообщениям в чате.
+Считаю WPM по сообщениям в чате.
 
 📋 <b>Команды:</b>
 /wpm — статистика
@@ -1360,13 +1273,11 @@ bot.on('message', async (msg) => {
   const activeDuel = await getActiveDuel(chatId);
   if (activeDuel && activeDuel.status === 'active' && activeDuel.duel_text.startsWith('SPAM_DUEL:')) {
     const duelState = activeSpamDuels[activeDuel.id];
-    if (duelState) {
-      if (userId === duelState.u1_id || userId === duelState.u2_id) {
-        const wordsCount = getValidWordsCount(text);
-        if (wordsCount >= duelState.minWords) {
-          if (userId === duelState.u1_id) duelState.user1Score++;
-          if (userId === duelState.u2_id) duelState.user2Score++;
-        }
+    if (duelState && (userId === duelState.u1_id || userId === duelState.u2_id)) {
+      const wordsCount = getValidWordsCount(text);
+      if (wordsCount >= duelState.minWords) {
+        if (userId === duelState.u1_id) duelState.user1Score++;
+        if (userId === duelState.u2_id) duelState.user2Score++;
       }
     }
     return;
@@ -1387,37 +1298,22 @@ bot.on('message', async (msg) => {
 
       await updateUserState(userId, chatId, text, settings.cooldown_seconds);
 
-      // Проверка заморозки
       const ban = await isRatingBanned(userId);
       if (!ban) {
         const oldStats = await getChatStatsForUser(chatId, userId);
         const wasRecord = !oldStats || wpm > (oldStats.best_wpm || 0);
         await updateChatStats(chatId, userId, wpm);
+        await addWpmHistory(chatId, userId, wpm);
 
-        // Титулы
         const newStats = await getChatStatsForUser(chatId, userId);
         if (newStats) {
-          const newTitles = await checkAndGrantTitles(chatId, userId, newStats.best_wpm, newStats.messages_count, settings);
-          for (const tid of newTitles) {
-            const t = ALL_TITLES[tid];
-            if (t) {
-              const me = await bot.getMe();
-              bot.sendMessage(chatId, `🎉 <b>${esc(getName(msg))}</b> получил титул ${t.emoji} <b>${t.name}</b>!`, {
-                parse_mode: 'HTML',
-                reply_markup: { inline_keyboard: [[{ text: '🎖 Надеть титул', url: `https://t.me/${me.username}?start=titles` }]] }
-              });
-            }
-          }
+          const newTitle = await checkAndGrantOneTitle(chatId, userId, newStats, settings);
+          if (newTitle) await sendTitleNotification(chatId, getName(msg), newTitle);
         }
 
-        // Ошибка системы
         if (rawWpm > settings.max_wpm_limit && !(await hasTitle(userId, 'system_error'))) {
           await grantTitle(userId, 'system_error');
-          const me = await bot.getMe();
-          bot.sendMessage(chatId, `🎉 <b>${esc(getName(msg))}</b> получил титул ⚠️ <b>Ошибка системы</b>!`, {
-            parse_mode: 'HTML',
-            reply_markup: { inline_keyboard: [[{ text: '🎖 Надеть титул', url: `https://t.me/${me.username}?start=titles` }]] }
-          });
+          await sendTitleNotification(chatId, getName(msg), 'system_error');
         }
 
         let rec = '';
@@ -1440,9 +1336,8 @@ ${getProgressBar(wpm)}${rec}
 ${getWpmEmoji(wpm)} <b>${esc(getName(msg))}</b>
 ⚡ Скорость: <b>${wpm} WPM</b>
 🎯 Точность: <b>${acc}%</b>
-⏱ Время: <b>${td.toFixed(1)}с</b>
 
-🔒 <b>Рейтинг заморожен — результат не записан</b>
+🔒 <b>Рейтинг заморожен — не записано</b>
         `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
       }
       return;
@@ -1450,20 +1345,35 @@ ${getWpmEmoji(wpm)} <b>${esc(getName(msg))}</b>
   }
 
   // =============================================
-  // АВТО WPM
+  // АВТО WPM — ЖЁСТКИЙ ФИЛЬТР v2
   // =============================================
-  if (text.length < settings.min_chars) {
+  const cleanText = text.replace(/\s+/g, '');
+
+  // Минимум 6 символов без пробелов
+  if (cleanText.length < 6) {
     await updateUserState(userId, chatId, text, settings.cooldown_seconds);
     return;
   }
 
-  if (state && state.last_message_text === text) return;
+  // Минимум 5 уникальных символов
+  if (countUniqueChars(text) < 5) {
+    await updateUserState(userId, chatId, text, settings.cooldown_seconds);
+    return;
+  }
+
+  // Повтор предыдущего
+  if (state && state.last_message_text === text) {
+    await updateUserState(userId, chatId, text, settings.cooldown_seconds);
+    return;
+  }
+
+  // Кулдаун
   if (state && state.cooldown_until && Date.now() < new Date(state.cooldown_until).getTime()) {
     await updateUserState(userId, chatId, text, settings.cooldown_seconds);
     return;
   }
 
-  // Подсчет
+  // Подсчет WPM
   if (state && state.last_message_time && !state.last_message_text?.startsWith('__')) {
     const td = (Date.now() - new Date(state.last_message_time).getTime()) / 1000;
 
@@ -1478,7 +1388,7 @@ ${getWpmEmoji(wpm)} <b>${esc(getName(msg))}</b>
       const wpm = Math.min(rawWpm, settings.max_wpm_limit);
 
       if (wpm > 0 && wpm <= settings.max_wpm_limit) {
-        // Проверка заморозки
+        // Заморозка
         const ban = await isRatingBanned(userId);
         if (ban) {
           await updateUserState(userId, chatId, text, settings.cooldown_seconds);
@@ -1487,40 +1397,33 @@ ${getWpmEmoji(wpm)} <b>${esc(getName(msg))}</b>
 
         const oldStats = await getChatStatsForUser(chatId, userId);
         const oldBest = oldStats ? oldStats.best_wpm : 0;
+        const oldAvg = oldStats ? oldStats.avg_wpm : 0;
 
         await updateChatStats(chatId, userId, wpm);
+        await addWpmHistory(chatId, userId, wpm);
 
-        // Титулы
+        // Анализ тренда по истории
         const newStats = await getChatStatsForUser(chatId, userId);
+        let wpmHistory = [];
+        if (newStats && newStats.wpm_history) {
+          wpmHistory = Array.isArray(newStats.wpm_history) ? newStats.wpm_history : [];
+        }
+        const trend = analyzeWpmTrend(wpmHistory, wpm);
+
+        // Титулы — только 1 за раз
         if (newStats) {
-          const newTitles = await checkAndGrantTitles(chatId, userId, newStats.best_wpm, newStats.messages_count, settings);
-          for (const tid of newTitles) {
-            const t = ALL_TITLES[tid];
-            if (t) {
-              try {
-                const me = await bot.getMe();
-                bot.sendMessage(chatId, `🎉 <b>${esc(getName(msg))}</b> получил титул ${t.emoji} <b>${t.name}</b>!`, {
-                  parse_mode: 'HTML',
-                  reply_markup: { inline_keyboard: [[{ text: '🎖 Надеть титул', url: `https://t.me/${me.username}?start=titles` }]] }
-                });
-              } catch (e) { }
-            }
-          }
+          const newTitle = await checkAndGrantOneTitle(chatId, userId, newStats, settings);
+          if (newTitle) await sendTitleNotification(chatId, getName(msg), newTitle);
         }
 
-        // Ошибка системы (если сырой > лимита)
+        // Ошибка системы
         if (rawWpm > settings.max_wpm_limit && !(await hasTitle(userId, 'system_error'))) {
           await grantTitle(userId, 'system_error');
-          try {
-            const me = await bot.getMe();
-            bot.sendMessage(chatId, `🎉 <b>${esc(getName(msg))}</b> получил титул ⚠️ <b>Ошибка системы</b>!`, {
-              parse_mode: 'HTML',
-              reply_markup: { inline_keyboard: [[{ text: '🎖 Надеть титул', url: `https://t.me/${me.username}?start=titles` }]] }
-            });
-          } catch (e) { }
+          await sendTitleNotification(chatId, getName(msg), 'system_error');
         }
 
         if (autowpmEnabled) {
+          // Рекорд — стал лучше
           if (wpm > oldBest && oldBest > 0) {
             const diff = wpm - oldBest;
             bot.sendMessage(chatId, `
@@ -1530,13 +1433,39 @@ ${getWpmEmoji(wpm)} WPM поднялся до <b>${wpm}</b>! (+${diff})
 ${rand(WPM_UP_MESSAGES)}
             `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
           }
+          // Первый замер
           else if (oldBest === 0 && (!oldStats || oldStats.messages_count === 0)) {
             bot.sendMessage(chatId, `
 ⚡ <b>${esc(getName(msg))}</b> — первый замер!
 ${getWpmEmoji(wpm)} <b>${wpm} WPM</b> • ${getRank(wpm)}
             `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
           }
+          // Тренд вниз — стал хуже (понижение 5-8 WPM)
+          else if (trend.trend === 'down' && trend.diff >= 5 && wpmHistory.length >= 5) {
+            const penalty = Math.min(Math.max(5, trend.diff), 8);
+            // Понижаем avg_wpm
+            if (newStats && newStats.avg_wpm > penalty) {
+              try {
+                await supabase.from('chat_stats').update({
+                  avg_wpm: Math.max(0, newStats.avg_wpm - penalty)
+                }).eq('chat_id', chatId).eq('user_id', userId);
+              } catch (e) { }
+            }
+            bot.sendMessage(chatId, `
+📉 <b>${esc(getName(msg))}</b>
+${rand(WPM_DOWN_MESSAGES)}
+⚡ Текущий: <b>${wpm} WPM</b> (−${penalty} к среднему)
+            `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+          }
+          // Тренд вверх — стал лучше (но не рекорд)
+          else if (trend.trend === 'up' && trend.diff >= 8 && wpmHistory.length >= 5) {
+            bot.sendMessage(chatId, `
+📈 <b>${esc(getName(msg))}</b> набирает скорость!
+⚡ <b>${wpm} WPM</b> (+${trend.diff} к среднему)
+            `, { parse_mode: 'HTML', reply_to_message_id: msg.message_id });
+          }
 
+          // Троллинг
           if (settings.trolling_enabled && Math.random() < settings.troll_chance) {
             if (wpm <= oldBest || oldBest === 0) {
               bot.sendMessage(chatId, rand(TROLL_MESSAGES[getTrollCategory(wpm)]), { reply_to_message_id: msg.message_id });
@@ -1551,22 +1480,19 @@ ${getWpmEmoji(wpm)} <b>${wpm} WPM</b> • ${getRank(wpm)}
 });
 
 // =============================================
-// ОШИБКИ — улучшенная обработка
+// ОШИБКИ
 // =============================================
 bot.on('polling_error', (e) => {
   if (e.code === 'EFATAL' || e.code === 'ETELEGRAM') {
-    console.error('[BOT] Polling error (reconnecting...):', e.code);
+    console.error('[BOT] Polling reconnect:', e.code);
   } else {
     console.error('[BOT] Polling:', e.code, e.message);
   }
 });
 bot.on('error', (e) => console.error('[BOT] Error:', e.message));
-process.on('uncaughtException', (e) => {
-  console.error('[FATAL]', e.message);
-  // Не крашим процесс при сетевых ошибках
-});
+process.on('uncaughtException', (e) => { console.error('[FATAL]', e.message); });
 process.on('unhandledRejection', (r) => {
-  if (r && r.code === 'EFATAL') {
+  if (r && (r.code === 'EFATAL' || r.code === 'ECONNRESET' || r.code === 'ETIMEDOUT')) {
     console.error('[FATAL] Network error, continuing...');
     return;
   }
