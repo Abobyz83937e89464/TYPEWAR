@@ -2,6 +2,8 @@ const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
 const { createClient } = require('@supabase/supabase-js');
 const cron = require('node-cron');
+const https = require('https');
+const http = require('http');
 
 // =============================================
 // КОНФИГ
@@ -12,6 +14,18 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_yjHQeH6OCcPRAuw
 const PORT = process.env.PORT || 3000;
 const OWNER_ID = 8503291981;
 
+// =============================================
+// RENDER URL
+// =============================================
+function detectRenderURL() {
+  if (process.env.RENDER_URL) return process.env.RENDER_URL;
+  if (process.env.RENDER_EXTERNAL_HOSTNAME) return 'https://' + process.env.RENDER_EXTERNAL_HOSTNAME;
+  if (process.env.RENDER_SERVICE_NAME) return 'https://' + process.env.RENDER_SERVICE_NAME + '.onrender.com';
+  if (process.env.HOSTNAME && process.env.HOSTNAME.includes('render')) return 'https://' + process.env.HOSTNAME + '.onrender.com';
+  return null;
+}
+
+let RENDER_URL = detectRenderURL();
 let SUPABASE_CONNECTED = false;
 
 // =============================================
@@ -75,8 +89,27 @@ async function checkSupabase() {
 }
 
 // =============================================
+// PING
+// =============================================
+function pingServer(url) {
+  if (!url) return;
+  const pingUrl = url + '/health';
+  const client = pingUrl.startsWith('https') ? https : http;
+  client.get(pingUrl, (res) => {
+    console.log(`[PING] ✅ ${url} → ${res.statusCode}`);
+  }).on('error', (err) => {
+    console.log(`[PING] ❌ ${url} → ${err.message}`);
+  });
+}
+
+// =============================================
 // CRON
 // =============================================
+cron.schedule('*/4 * * * *', () => {
+  if (RENDER_URL) pingServer(RENDER_URL);
+  else { RENDER_URL = detectRenderURL(); pingServer(RENDER_URL || `http://localhost:${PORT}`); }
+});
+
 cron.schedule('* * * * *', async () => {
   try { await supabase.rpc('cleanup_expired_duels'); } catch (e) { }
 });
@@ -119,7 +152,9 @@ app.listen(PORT, async () => {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   const sbOk = await checkSupabase();
   console.log(`[SUPABASE] ${sbOk ? '✅' : '❌'}`);
-  console.log('[NORTHFLANK] ✅ Платформа готова для запуска');
+  RENDER_URL = detectRenderURL();
+  if (RENDER_URL) { console.log(`[RENDER]   ✅ ${RENDER_URL}`); setTimeout(() => pingServer(RENDER_URL), 3000); }
+  else console.log(`[RENDER]   ⚠️  Не найдена`);
   console.log(`[SERVER]   🌐 Порт: ${PORT}\n[BOT]      ⚡ Polling started\n`);
 });
 
